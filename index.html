@@ -53,13 +53,37 @@
 
 <body>
 
+    <div id="debug" style="
+            position:fixed;
+            bottom:0;
+            left:0;
+            right:0;
+            max-height:40%;
+            overflow:auto;
+            background:#000;
+            color:#0f0;
+            font-size:12px;
+            padding:6px;
+            z-index:9999;
+        "></div>
+
     <div id="list"></div>
 
     <button class="done-btn" id="markDone">Refresh</button>
 
     <script>
         /* =======================
-           IndexedDB Setup
+        Debug Helper
+        ======================= */
+
+        function log(msg) {
+            console.log(msg);
+            const d = document.getElementById("debug");
+            d.innerHTML += msg + "<br>";
+        }
+
+        /* =======================
+        IndexedDB Setup
         ======================= */
 
         const DB_NAME = "PhoneUserDB";
@@ -83,7 +107,7 @@
         }
 
         /* =======================
-           Meta helpers
+        Meta helpers
         ======================= */
 
         async function getMarkAsDone() {
@@ -104,7 +128,7 @@
         }
 
         /* =======================
-           User data helpers
+        User data helpers
         ======================= */
 
         async function clearUsers() {
@@ -138,34 +162,44 @@
         }
 
         /* =======================
-           CSV fetch
-        ======================= */
-
-        /* =======================
-           CSV fetch
+        CSV fetch
         ======================= */
 
         async function fetchCSV() {
+            log("Fetching CSV…");
+
             try {
-                const text = await fetch("main.csv").then(r => r.text());
+                const res = await fetch("main.csv", { cache: "no-store" });
+                log("CSV response status = " + res.status);
+
+                if (!res.ok) {
+                    log("CSV fetch failed");
+                    return [];
+                }
+
+                const text = await res.text();
+                log("CSV raw length = " + text.length);
+
                 const lines = text
                     .split("\n")
                     .map(x => x.trim())
                     .filter(Boolean);
 
-                // Remove header if it matches "username" (case-insensitive)
-                if (lines.length > 0 && lines[0].toLowerCase() === "username") {
+                if (lines[0]?.toLowerCase() === "username") {
                     lines.shift();
+                    log("CSV header removed");
                 }
+
+                log("CSV lines parsed = " + lines.length);
                 return lines;
             } catch (err) {
-                console.error("Error fetching CSV:", err);
+                log("CSV ERROR: " + err.message);
                 return [];
             }
         }
 
         /* =======================
-           Clipboard (mobile-safe)
+        Clipboard (mobile-safe)
         ======================= */
 
         async function copyToClipboard(text) {
@@ -185,7 +219,7 @@
         }
 
         /* =======================
-           Render
+        Render
         ======================= */
 
         function render(users) {
@@ -218,30 +252,61 @@
         }
 
         /* =======================
-           Init (ONLY on entry)
+        Init (ONLY on entry)
         ======================= */
 
         (async function init() {
-            const done = await getMarkAsDone();
-            const users = await getUsers();
+            log("INIT start");
 
-            if (done || users.length === 0) {
+            const done = await getMarkAsDone();
+            log("mark_as_done = " + done);
+
+            const usersBefore = await getUsers();
+            log("users before = " + usersBefore.length);
+
+            if (done || usersBefore.length === 0) {
+                log("Entering FETCH block");
+
                 const fresh = await fetchCSV();
-                await clearUsers();
-                await saveUsers(fresh);
-                await setMarkAsDone(false);
+                log("CSV fetched, count = " + fresh.length);
+
+                if (fresh.length === 0) {
+                    log("CSV EMPTY → aborting save");
+                } else {
+                    await clearUsers();
+                    log("Users cleared");
+
+                    await saveUsers(fresh);
+                    log("Users saved");
+
+                    await setMarkAsDone(false);
+                    log("mark_as_done reset");
+                }
+            } else {
+                log("Skipping fetch block");
             }
 
-            render(await getUsers());
+            const usersAfter = await getUsers();
+            log("users after = " + usersAfter.length);
+
+            render(usersAfter);
         })();
 
         /* =======================
-           Button
+        Button
         ======================= */
 
         document.getElementById("markDone").onclick = async () => {
+            log("Mark as done clicked");
+
             await setMarkAsDone(true);
-            alert("Marked as done. Will refresh on next open.");
+            log("mark_as_done written");
+
+            // force commit time on mobile
+            setTimeout(() => {
+                log("Ready to refresh");
+                alert("Marked as done. Now REFRESH.");
+            }, 200);
         };
     </script>
 
