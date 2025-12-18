@@ -53,35 +53,11 @@
 
 <body>
 
-    <div id="debug" style="
-            position:fixed;
-            bottom:0;
-            left:0;
-            right:0;
-            max-height:40%;
-            overflow:auto;
-            background:#000;
-            color:#0f0;
-            font-size:12px;
-            padding:6px;
-            z-index:9999;
-        "></div>
-
     <div id="list"></div>
 
     <button class="done-btn" id="markDone">Refresh</button>
 
     <script>
-        /* =======================
-        Debug Helper
-        ======================= */
-
-        function log(msg) {
-            console.log(msg);
-            const d = document.getElementById("debug");
-            d.innerHTML += msg + "<br>";
-        }
-
         /* =======================
         IndexedDB Setup
         ======================= */
@@ -166,20 +142,15 @@
         ======================= */
 
         async function fetchCSV() {
-            log("Fetching CSV…");
-
             try {
                 const res = await fetch("main.csv", { cache: "no-store" });
-                log("CSV response status = " + res.status);
 
                 if (!res.ok) {
-                    log("CSV fetch failed");
+                    console.error("CSV fetch failed with status:", res.status);
                     return [];
                 }
 
                 const text = await res.text();
-                log("CSV raw length = " + text.length);
-
                 const lines = text
                     .split("\n")
                     .map(x => x.trim())
@@ -187,13 +158,11 @@
 
                 if (lines[0]?.toLowerCase() === "username") {
                     lines.shift();
-                    log("CSV header removed");
                 }
 
-                log("CSV lines parsed = " + lines.length);
                 return lines;
             } catch (err) {
-                log("CSV ERROR: " + err.message);
+                console.error("CSV ERROR:", err);
                 return [];
             }
         }
@@ -256,39 +225,22 @@
         ======================= */
 
         (async function init() {
-            log("INIT start");
-
             const done = await getMarkAsDone();
-            log("mark_as_done = " + done);
-
             const usersBefore = await getUsers();
-            log("users before = " + usersBefore.length);
 
             if (done || usersBefore.length === 0) {
-                log("Entering FETCH block");
-
                 const fresh = await fetchCSV();
-                log("CSV fetched, count = " + fresh.length);
 
                 if (fresh.length === 0) {
-                    log("CSV EMPTY → aborting save");
+                    console.warn("CSV is empty, skipping save");
                 } else {
                     await clearUsers();
-                    log("Users cleared");
-
                     await saveUsers(fresh);
-                    log("Users saved");
-
                     await setMarkAsDone(false);
-                    log("mark_as_done reset");
                 }
-            } else {
-                log("Skipping fetch block");
             }
 
             const usersAfter = await getUsers();
-            log("users after = " + usersAfter.length);
-
             render(usersAfter);
         })();
 
@@ -297,14 +249,10 @@
         ======================= */
 
         document.getElementById("markDone").onclick = async () => {
-            log("Mark as done clicked");
-
             await setMarkAsDone(true);
-            log("mark_as_done written");
 
             // force commit time on mobile
             setTimeout(() => {
-                log("Ready to refresh");
                 alert("Marked as done. Now REFRESH.");
             }, 200);
         };
