@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>User Cache</title>
+
+    <style>
+        body {
+            margin: 0;
+            background: #171717;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            padding: 12px;
+            color: white;
+        }
+
+        .card {
+            background: #893fff;
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 12px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 500;
+            user-select: none;
+            cursor: pointer;
+            transition: transform 0.1s ease, opacity 0.1s ease;
+        }
+
+        .card:active {
+            transform: scale(0.97);
+            opacity: 0.8;
+        }
+
+        .done-btn {
+            margin-top: 20px;
+            background: #33ea3c;
+            border: none;
+            border-radius: 16px;
+            padding: 18px;
+            width: 100%;
+            font-size: 16px;
+            color: rgb(0, 0, 0);
+            font-weight: 600;
+        }
+
+        .done-btn:active {
+            opacity: 0.8;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="list"></div>
+
+    <button class="done-btn" id="markDone">Refresh</button>
+
+    <script>
+        /* =======================
+           IndexedDB Setup
+        ======================= */
+
+        const DB_NAME = "PhoneUserDB";
+        const DB_VERSION = 1;
+        const USER_STORE = "users";
+        const META_STORE = "meta";
+
+        function openDB() {
+            return new Promise((resolve, reject) => {
+                const req = indexedDB.open(DB_NAME, DB_VERSION);
+
+                req.onupgradeneeded = () => {
+                    const db = req.result;
+                    db.createObjectStore(USER_STORE, { keyPath: "username" });
+                    db.createObjectStore(META_STORE, { keyPath: "key" });
+                };
+
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+        }
+
+        /* =======================
+           Meta helpers
+        ======================= */
+
+        async function getMarkAsDone() {
+            const db = await openDB();
+            const tx = db.transaction(META_STORE, "readonly");
+            const store = tx.objectStore(META_STORE);
+
+            return new Promise(res => {
+                const req = store.get("mark_as_done");
+                req.onsuccess = () => res(req.result?.value ?? false);
+            });
+        }
+
+        async function setMarkAsDone(val) {
+            const db = await openDB();
+            const tx = db.transaction(META_STORE, "readwrite");
+            tx.objectStore(META_STORE).put({ key: "mark_as_done", value: val });
+        }
+
+        /* =======================
+           User data helpers
+        ======================= */
+
+        async function clearUsers() {
+            const db = await openDB();
+            const tx = db.transaction(USER_STORE, "readwrite");
+            tx.objectStore(USER_STORE).clear();
+        }
+
+        async function saveUsers(list) {
+            const db = await openDB();
+            const tx = db.transaction(USER_STORE, "readwrite");
+            const store = tx.objectStore(USER_STORE);
+            list.forEach(u => store.put({ username: u }));
+        }
+
+        async function getUsers() {
+            const db = await openDB();
+            const tx = db.transaction(USER_STORE, "readonly");
+            const store = tx.objectStore(USER_STORE);
+
+            return new Promise(res => {
+                const req = store.getAll();
+                req.onsuccess = () => res(req.result);
+            });
+        }
+
+        async function deleteUser(username) {
+            const db = await openDB();
+            const tx = db.transaction(USER_STORE, "readwrite");
+            tx.objectStore(USER_STORE).delete(username);
+        }
+
+        /* =======================
+           CSV fetch
+        ======================= */
+
+        /* =======================
+           CSV fetch
+        ======================= */
+
+        async function fetchCSV() {
+            try {
+                const text = await fetch("main.csv").then(r => r.text());
+                const lines = text
+                    .split("\n")
+                    .map(x => x.trim())
+                    .filter(Boolean);
+
+                // Remove header if it matches "username" (case-insensitive)
+                if (lines.length > 0 && lines[0].toLowerCase() === "username") {
+                    lines.shift();
+                }
+                return lines;
+            } catch (err) {
+                console.error("Error fetching CSV:", err);
+                return [];
+            }
+        }
+
+        /* =======================
+           Clipboard (mobile-safe)
+        ======================= */
+
+        async function copyToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+            } else {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+            }
+        }
+
+        /* =======================
+           Render
+        ======================= */
+
+        function render(users) {
+            const list = document.getElementById("list");
+            list.innerHTML = "";
+
+            if (users.length === 0) {
+                list.innerHTML = "<div style='text-align:center; opacity:0.5; margin-top:20px;'>No users found</div>";
+                return;
+            }
+
+            users.forEach(({ username }) => {
+                const div = document.createElement("div");
+                div.className = "card";
+                div.textContent = username;
+
+                div.onclick = async () => {
+                    await copyToClipboard(username);
+                    await deleteUser(username);
+                    div.remove();
+
+                    // Check if empty after removal to show message
+                    if (list.children.length === 0) {
+                        list.innerHTML = "<div style='text-align:center; opacity:0.5; margin-top:20px;'>No users found</div>";
+                    }
+                };
+
+                list.appendChild(div);
+            });
+        }
+
+        /* =======================
+           Init (ONLY on entry)
+        ======================= */
+
+        (async function init() {
+            const done = await getMarkAsDone();
+            let users = await getUsers();
+
+            // Load from CSV if "marked as done" OR if the database is empty (first run)
+            if (done || users.length === 0) {
+                const fresh = await fetchCSV();
+                if (fresh.length > 0) {
+                    await clearUsers();
+                    await saveUsers(fresh);
+                    await setMarkAsDone(false);
+                    users = await getUsers(); // Refresh users list
+                }
+            }
+
+            render(users);
+        })();
+
+        /* =======================
+           Button
+        ======================= */
+
+        document.getElementById("markDone").onclick = async () => {
+            await setMarkAsDone(true);
+            alert("Marked as done. Will refresh on next open.");
+        };
+    </script>
+
+</body>
+
+</html>
