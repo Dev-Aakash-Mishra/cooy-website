@@ -223,20 +223,16 @@
 
         (async function init() {
             const done = await getMarkAsDone();
-            let users = await getUsers();
+            const users = await getUsers();
 
-            // Load from CSV if "marked as done" OR if the database is empty (first run)
             if (done || users.length === 0) {
                 const fresh = await fetchCSV();
-                if (fresh.length > 0) {
-                    await clearUsers();
-                    await saveUsers(fresh);
-                    await setMarkAsDone(false);
-                    users = await getUsers(); // Refresh users list
-                }
+                await clearUsers();
+                await saveUsers(fresh);
+                await setMarkAsDone(false);
             }
 
-            render(users);
+            render(await getUsers());
         })();
 
         /* =======================
