@@ -21,8 +21,6 @@
             padding: 18px;
             margin-bottom: 12px;
             text-align: center;
-            font-size: 18px;
-            font-weight: 500;
             user-select: none;
             cursor: pointer;
             transition: transform 0.1s ease, opacity 0.1s ease;
@@ -31,6 +29,21 @@
         .card:active {
             transform: scale(0.97);
             opacity: 0.8;
+        }
+
+        .card-header {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            opacity: 0.9;
+        }
+
+        .card-content {
+            font-size: 16px;
+            font-weight: 500;
+            word-break: break-all;
         }
 
         .done-btn {
@@ -63,7 +76,7 @@
         ======================= */
 
         const DB_NAME = "PhoneUserDB_tiwari";
-        const DB_VERSION = 1;
+        const DB_VERSION = 2; // Incremented version for schema change
         const USER_STORE = "users";
         const META_STORE = "meta";
 
@@ -73,8 +86,18 @@
 
                 req.onupgradeneeded = () => {
                     const db = req.result;
-                    db.createObjectStore(USER_STORE, { keyPath: "username" });
-                    db.createObjectStore(META_STORE, { keyPath: "key" });
+
+                    // Delete old store if it exists
+                    if (db.objectStoreNames.contains(USER_STORE)) {
+                        db.deleteObjectStore(USER_STORE);
+                    }
+
+                    // Create new store with autoIncrement id
+                    db.createObjectStore(USER_STORE, { keyPath: "id", autoIncrement: true });
+
+                    if (!db.objectStoreNames.contains(META_STORE)) {
+                        db.createObjectStore(META_STORE, { keyPath: "key" });
+                    }
                 };
 
                 req.onsuccess = () => resolve(req.result);
@@ -117,7 +140,7 @@
             const db = await openDB();
             const tx = db.transaction(USER_STORE, "readwrite");
             const store = tx.objectStore(USER_STORE);
-            list.forEach(u => store.put({ username: u }));
+            list.forEach(u => store.put({ instagram: u.instagram, msg: u.msg }));
         }
 
         async function getUsers() {
@@ -131,10 +154,10 @@
             });
         }
 
-        async function deleteUser(username) {
+        async function deleteUser(id) {
             const db = await openDB();
             const tx = db.transaction(USER_STORE, "readwrite");
-            tx.objectStore(USER_STORE).delete(username);
+            tx.objectStore(USER_STORE).delete(id);
         }
 
         /* =======================
@@ -151,16 +174,74 @@
                 }
 
                 const text = await res.text();
-                const lines = text
-                    .split("\n")
-                    .map(x => x.trim())
-                    .filter(Boolean);
+                const lines = text.split("\n").map(x => x.trim()).filter(Boolean);
 
-                if (lines[0]?.toLowerCase() === "username") {
+                if (lines.length === 0) return [];
+
+                // Remove header if present
+                if (lines[0].toLowerCase().includes("instagram")) {
                     lines.shift();
                 }
 
-                return lines;
+                const users = [];
+
+                // Parse CSV - handle quoted fields with newlines
+                for (let i = 0; i < lines.length; i++) {
+                    let line = lines[i];
+
+                    // Simple CSV parser for two columns
+                    let instagram = "";
+                    let msg = "";
+
+                    // Find first comma (instagram field ends here)
+                    let firstCommaIdx = line.indexOf(",");
+
+                    if (firstCommaIdx === -1) continue; // Skip malformed lines
+
+                    instagram = line.substring(0, firstCommaIdx).trim();
+                    let remainder = line.substring(firstCommaIdx + 1).trim();
+
+                    // Check if msg is quoted
+                    if (remainder.startsWith('"')) {
+                        // Find the closing quote
+                        let msgContent = remainder.substring(1);
+                        let closingQuoteIdx = -1;
+
+                        // Look for closing quote, handling escaped quotes
+                        for (let j = 0; j < msgContent.length; j++) {
+                            if (msgContent[j] === '"' && (j === msgContent.length - 1 || msgContent[j + 1] !== '"')) {
+                                closingQuoteIdx = j;
+                                break;
+                            }
+                        }
+
+                        if (closingQuoteIdx !== -1) {
+                            msg = msgContent.substring(0, closingQuoteIdx);
+                        } else {
+                            // Multi-line quoted field - collect lines until we find closing quote
+                            msg = msgContent;
+                            i++;
+                            while (i < lines.length) {
+                                let nextLine = lines[i];
+                                msg += "\n" + nextLine;
+
+                                if (nextLine.includes('"')) {
+                                    // Found potential closing quote
+                                    let quoteIdx = nextLine.lastIndexOf('"');
+                                    msg = msg.substring(0, msg.lastIndexOf('"'));
+                                    break;
+                                }
+                                i++;
+                            }
+                        }
+                    } else {
+                        msg = remainder;
+                    }
+
+                    users.push({ instagram, msg });
+                }
+
+                return users;
             } catch (err) {
                 console.error("CSV ERROR:", err);
                 return [];
@@ -200,14 +281,38 @@
                 return;
             }
 
-            users.forEach(({ username }) => {
+            users.forEach(({ id, instagram, msg }) => {
                 const div = document.createElement("div");
                 div.className = "card";
-                div.textContent = username;
+
+                // Create header
+                const header = document.createElement("div");
+                header.className = "card-header";
+                header.textContent = "INSTAGRAM";
+
+                // Create content
+                const content = document.createElement("div");
+                content.className = "card-content";
+                content.textContent = instagram || "(No Instagram URL)";
+
+                div.appendChild(header);
+                div.appendChild(content);
 
                 div.onclick = async () => {
-                    await copyToClipboard(username);
-                    await deleteUser(username);
+                    // Copy message to clipboard
+                    if (msg) {
+                        await copyToClipboard(msg);
+                    }
+
+                    // Open Instagram profile if URL exists
+                    if (instagram) {
+                        window.open(instagram, "_blank");
+                    }
+
+                    // Delete from database
+                    await deleteUser(id);
+
+                    // Remove tile with animation
                     div.remove();
 
                     // Check if empty after removal to show message
