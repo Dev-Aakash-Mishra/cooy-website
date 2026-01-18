@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Influencer Marketing</title>
+
+    <style>
+        body {
+            margin: 0;
+            background: #171717;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+            padding: 12px;
+            color: white;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .username-display {
+            font-size: 18px;
+            font-weight: 600;
+            color: #893fff;
+        }
+
+        .logout-btn {
+            background: #ff4444;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .logout-btn:active {
+            opacity: 0.8;
+        }
+
+        .card {
+            background: #893fff;
+            border-radius: 16px;
+            padding: 18px;
+            margin-bottom: 12px;
+            text-align: center;
+            user-select: none;
+            cursor: pointer;
+            transition: transform 0.1s ease, opacity 0.1s ease;
+        }
+
+        .card:active {
+            transform: scale(0.97);
+            opacity: 0.8;
+        }
+
+        .card-header {
+            font-size: 14px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+            opacity: 0.9;
+        }
+
+        .card-content {
+            font-size: 16px;
+            font-weight: 500;
+            word-break: break-all;
+        }
+
+        .platform-card {
+            background: #2196F3;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .platform-card.facebook {
+            background: #1877F2;
+        }
+
+        .platform-card.instagram {
+            background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+        }
+
+        .platform-card.linkedin {
+            background: #0077B5;
+        }
+
+        .refresh-btn {
+            margin-top: 20px;
+            background: #33ea3c;
+            border: none;
+            border-radius: 16px;
+            padding: 18px;
+            width: 100%;
+            font-size: 16px;
+            color: rgb(0, 0, 0);
+            font-weight: 600;
+            cursor: pointer;
+            display: none;
+        }
+
+        .refresh-btn:active {
+            opacity: 0.8;
+        }
+
+        .refresh-btn.show {
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            opacity: 0.7;
+        }
+
+        .empty-message {
+            text-align: center;
+            padding: 40px;
+            font-size: 16px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <div class="username-display" id="usernameDisplay">Loading...</div>
+        <button class="logout-btn" id="logoutBtn">Logout</button>
+    </div>
+
+    <div id="list"></div>
+
+    <button class="refresh-btn" id="refreshBtn">Refresh - Load Next 10</button>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const SUPABASE_URL = 'https://opxiinzwnmxjdyxpczvv.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9weGlpbnp3bm14amR5eHBjenZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg3MzUxMDcsImV4cCI6MjA4NDMxMTEwN30.UjuEA231oD7-N_UeT1U3SgD764XKDi5UV1hyWQn7JVE';
+
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const userId = localStorage.getItem('user_id');
+        const username = localStorage.getItem('username');
+        let selectedPlatform = localStorage.getItem('selected_platform');
+
+        if (!userId) {
+            window.location.href = 'index.html';
+        }
+
+        document.getElementById('usernameDisplay').textContent = username || 'User';
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.clear();
+            window.location.href = 'index.html';
+        });
+
+        async function copyToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+            } else {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                document.execCommand("copy");
+                document.body.removeChild(ta);
+            }
+        }
+
+        function showPlatformSelection() {
+            const list = document.getElementById('list');
+            list.innerHTML = '';
+
+            const platforms = [
+                { name: 'Facebook', class: 'facebook', column: 'facebook' },
+                { name: 'Instagram', class: 'instagram', column: 'instagram' },
+                { name: 'LinkedIn', class: 'linkedin', column: 'linkedin' }
+            ];
+
+            platforms.forEach(platform => {
+                const div = document.createElement('div');
+                div.className = `card platform-card ${platform.class}`;
+                div.textContent = platform.name;
+
+                div.onclick = async () => {
+                    selectedPlatform = platform.column;
+                    localStorage.setItem('selected_platform', selectedPlatform);
+                    await loadData();
+                };
+
+                list.appendChild(div);
+            });
+
+            document.getElementById('refreshBtn').classList.remove('show');
+        }
+
+        async function loadData() {
+            if (!selectedPlatform) {
+                showPlatformSelection();
+                return;
+            }
+
+            const list = document.getElementById('list');
+            list.innerHTML = '<div class="loading">Loading data...</div>';
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from('data')
+                    .select(`id, ${selectedPlatform}, message`)
+                    .not(selectedPlatform, 'is', null)
+                    .neq(selectedPlatform, 'USED')
+                    .order('id')
+                    .limit(10);
+
+                if (error) {
+                    console.error('Error fetching data:', error);
+                    list.innerHTML = '<div class="empty-message">Error loading data</div>';
+                    return;
+                }
+
+                if (!data || data.length === 0) {
+                    list.innerHTML = '<div class="empty-message">No more data available</div>';
+                    document.getElementById('refreshBtn').classList.remove('show');
+                    return;
+                }
+
+                const rowIds = data.map(row => row.id);
+                const updateObj = {};
+                updateObj[selectedPlatform] = 'USED';
+
+                await supabaseClient
+                    .from('data')
+                    .update(updateObj)
+                    .in('id', rowIds);
+
+                renderDataTiles(data);
+                document.getElementById('refreshBtn').classList.add('show');
+
+            } catch (err) {
+                console.error('Error:', err);
+                list.innerHTML = '<div class="empty-message">Error loading data</div>';
+            }
+        }
+
+        function renderDataTiles(data) {
+            const list = document.getElementById('list');
+            list.innerHTML = '';
+
+            data.forEach(row => {
+                const div = document.createElement('div');
+                div.className = 'card';
+
+                const header = document.createElement('div');
+                header.className = 'card-header';
+                header.textContent = selectedPlatform.toUpperCase();
+
+                const content = document.createElement('div');
+                content.className = 'card-content';
+                content.textContent = row[selectedPlatform] || '(No URL)';
+
+                div.appendChild(header);
+                div.appendChild(content);
+
+                div.onclick = async () => {
+                    if (row.message) {
+                        await copyToClipboard(row.message);
+                    }
+
+                    if (row[selectedPlatform]) {
+                        window.open(row[selectedPlatform], '_blank');
+                    }
+
+                    div.remove();
+
+                    if (list.children.length === 0) {
+                        list.innerHTML = '<div class="empty-message">All tiles clicked. Click Refresh for more.</div>';
+                    }
+                };
+
+                list.appendChild(div);
+            });
+        }
+
+        document.getElementById('refreshBtn').addEventListener('click', async () => {
+            await loadData();
+        });
+
+        if (selectedPlatform) {
+            loadData();
+        } else {
+            showPlatformSelection();
+        }
+    </script>
+
+</body>
+
+</html>

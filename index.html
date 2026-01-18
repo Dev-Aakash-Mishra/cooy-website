@@ -4,259 +4,232 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SUN Website/title>
+    <title>Login - Influencer Marketing</title>
 
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
             background: #171717;
             font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-            padding: 12px;
+            padding: 20px;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .login-container {
+            background: #242424;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 400px;
+            width: 100%;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        .login-title {
+            font-size: 28px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 30px;
+            color: #893fff;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #ccc;
+        }
+
+        select,
+        input {
+            width: 100%;
+            padding: 14px;
+            border-radius: 12px;
+            border: 2px solid #333;
+            background: #1a1a1a;
+            color: white;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+
+        select:focus,
+        input:focus {
+            outline: none;
+            border-color: #893fff;
+        }
+
+        select option {
+            background: #1a1a1a;
             color: white;
         }
 
-        .card {
-            background: #893fff;
-            border-radius: 16px;
-            padding: 18px;
-            margin-bottom: 12px;
-            text-align: center;
-            font-size: 18px;
-            font-weight: 500;
-            user-select: none;
-            cursor: pointer;
-            transition: transform 0.1s ease, opacity 0.1s ease;
-        }
-
-        .card:active {
-            transform: scale(0.97);
-            opacity: 0.8;
-        }
-
-        .done-btn {
-            margin-top: 20px;
-            background: #33ea3c;
-            border: none;
-            border-radius: 16px;
-            padding: 18px;
+        .login-btn {
             width: 100%;
-            font-size: 16px;
-            color: rgb(0, 0, 0);
+            padding: 16px;
+            background: #893fff;
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-size: 18px;
             font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s;
+            margin-top: 10px;
         }
 
-        .done-btn:active {
-            opacity: 0.8;
+        .login-btn:hover {
+            opacity: 0.9;
+        }
+
+        .login-btn:active {
+            transform: scale(0.98);
+        }
+
+        .login-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            background: #ff4444;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 14px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
         }
     </style>
 </head>
 
 <body>
 
-    <div id="list"></div>
+    <div class="login-container">
+        <h1 class="login-title">Login</h1>
 
-    <button class="done-btn" id="markDone">Refresh</button>
+        <div class="error-message" id="errorMessage"></div>
 
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <select id="username" required>
+                    <option value="">Select Username</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter your password" required />
+            </div>
+
+            <button type="submit" class="login-btn" id="loginBtn">Login</button>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        /* =======================
-        IndexedDB Setup
-        ======================= */
+        document.addEventListener('DOMContentLoaded', function () {
+            const USERS = ['Aakash', 'user2', 'user3', 'admin'];
 
-        const DB_NAME = "PhoneUserDB";
-        const DB_VERSION = 1;
-        const USER_STORE = "users";
-        const META_STORE = "meta";
+            const SUPABASE_URL = 'https://opxiinzwnmxjdyxpczvv.supabase.co';
+            const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9weGlpbnp3bm14amR5eHBjenZ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg3MzUxMDcsImV4cCI6MjA4NDMxMTEwN30.UjuEA231oD7-N_UeT1U3SgD764XKDi5UV1hyWQn7JVE';
 
-        function openDB() {
-            return new Promise((resolve, reject) => {
-                const req = indexedDB.open(DB_NAME, DB_VERSION);
+            const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-                req.onupgradeneeded = () => {
-                    const db = req.result;
-                    db.createObjectStore(USER_STORE, { keyPath: "username" });
-                    db.createObjectStore(META_STORE, { keyPath: "key" });
-                };
-
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = () => reject(req.error);
+            const usernameSelect = document.getElementById('username');
+            USERS.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user;
+                option.textContent = user;
+                usernameSelect.appendChild(option);
             });
-        }
 
-        /* =======================
-        Meta helpers
-        ======================= */
+            const loginForm = document.getElementById('loginForm');
+            const errorMessage = document.getElementById('errorMessage');
+            const loginBtn = document.getElementById('loginBtn');
 
-        async function getMarkAsDone() {
-            const db = await openDB();
-            const tx = db.transaction(META_STORE, "readonly");
-            const store = tx.objectStore(META_STORE);
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.classList.add('show');
+                setTimeout(() => {
+                    errorMessage.classList.remove('show');
+                }, 3000);
+            }
 
-            return new Promise(res => {
-                const req = store.get("mark_as_done");
-                req.onsuccess = () => res(req.result?.value ?? false);
-            });
-        }
+            loginForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
 
-        async function setMarkAsDone(val) {
-            const db = await openDB();
-            const tx = db.transaction(META_STORE, "readwrite");
-            tx.objectStore(META_STORE).put({ key: "mark_as_done", value: val });
-        }
+                const username = document.getElementById('username').value;
+                const password = document.getElementById('password').value;
 
-        /* =======================
-        User data helpers
-        ======================= */
-
-        async function clearUsers() {
-            const db = await openDB();
-            const tx = db.transaction(USER_STORE, "readwrite");
-            tx.objectStore(USER_STORE).clear();
-        }
-
-        async function saveUsers(list) {
-            const db = await openDB();
-            const tx = db.transaction(USER_STORE, "readwrite");
-            const store = tx.objectStore(USER_STORE);
-            list.forEach(u => store.put({ username: u }));
-        }
-
-        async function getUsers() {
-            const db = await openDB();
-            const tx = db.transaction(USER_STORE, "readonly");
-            const store = tx.objectStore(USER_STORE);
-
-            return new Promise(res => {
-                const req = store.getAll();
-                req.onsuccess = () => res(req.result);
-            });
-        }
-
-        async function deleteUser(username) {
-            const db = await openDB();
-            const tx = db.transaction(USER_STORE, "readwrite");
-            tx.objectStore(USER_STORE).delete(username);
-        }
-
-        /* =======================
-        CSV fetch
-        ======================= */
-
-        async function fetchCSV() {
-            try {
-                const res = await fetch("main.csv", { cache: "no-store" });
-
-                if (!res.ok) {
-                    console.error("CSV fetch failed with status:", res.status);
-                    return [];
+                if (!username || !password) {
+                    showError('Please fill in all fields');
+                    return;
                 }
 
-                const text = await res.text();
-                const lines = text
-                    .split("\n")
-                    .map(x => x.trim())
-                    .filter(Boolean);
+                loginBtn.disabled = true;
+                loginBtn.textContent = 'Logging in...';
 
-                if (lines[0]?.toLowerCase() === "username") {
-                    lines.shift();
-                }
+                try {
+                    const { data, error } = await supabaseClient
+                        .from('users')
+                        .select('id, username, password')
+                        .eq('username', username)
+                        .single();
 
-                return lines;
-            } catch (err) {
-                console.error("CSV ERROR:", err);
-                return [];
-            }
-        }
-
-        /* =======================
-        Clipboard (mobile-safe)
-        ======================= */
-
-        async function copyToClipboard(text) {
-            if (navigator.clipboard && window.isSecureContext) {
-                await navigator.clipboard.writeText(text);
-            } else {
-                const ta = document.createElement("textarea");
-                ta.value = text;
-                ta.style.position = "fixed";
-                ta.style.opacity = "0";
-                document.body.appendChild(ta);
-                ta.focus();
-                ta.select();
-                document.execCommand("copy");
-                document.body.removeChild(ta);
-            }
-        }
-
-        /* =======================
-        Render
-        ======================= */
-
-        function render(users) {
-            const list = document.getElementById("list");
-            list.innerHTML = "";
-
-            if (users.length === 0) {
-                list.innerHTML = "<div style='text-align:center; opacity:0.5; margin-top:20px;'>No users found</div>";
-                return;
-            }
-
-            users.forEach(({ username }) => {
-                const div = document.createElement("div");
-                div.className = "card";
-                div.textContent = username;
-
-                div.onclick = async () => {
-                    await copyToClipboard(username);
-                    await deleteUser(username);
-                    div.remove();
-
-                    // Check if empty after removal to show message
-                    if (list.children.length === 0) {
-                        list.innerHTML = "<div style='text-align:center; opacity:0.5; margin-top:20px;'>No users found</div>";
+                    if (error || !data) {
+                        showError('User not found');
+                        loginBtn.disabled = false;
+                        loginBtn.textContent = 'Login';
+                        return;
                     }
-                };
 
-                list.appendChild(div);
-            });
-        }
+                    if (data.password !== password) {
+                        showError('Incorrect password');
+                        loginBtn.disabled = false;
+                        loginBtn.textContent = 'Login';
+                        return;
+                    }
 
-        /* =======================
-        Init (ONLY on entry)
-        ======================= */
+                    localStorage.setItem('user_id', data.id);
+                    localStorage.setItem('username', data.username);
+                    localStorage.removeItem('selected_platform');
 
-        (async function init() {
-            const done = await getMarkAsDone();
-            const usersBefore = await getUsers();
+                    window.location.href = 'user.html';
 
-            if (done || usersBefore.length === 0) {
-                const fresh = await fetchCSV();
-
-                if (fresh.length === 0) {
-                    console.warn("CSV is empty, skipping save");
-                } else {
-                    await clearUsers();
-                    await saveUsers(fresh);
-                    await setMarkAsDone(false);
+                } catch (err) {
+                    console.error('Login error:', err);
+                    showError('Login failed. Please try again.');
+                    loginBtn.disabled = false;
+                    loginBtn.textContent = 'Login';
                 }
+            });
+
+            if (localStorage.getItem('user_id')) {
+                window.location.href = 'user.html';
             }
-
-            const usersAfter = await getUsers();
-            render(usersAfter);
-        })();
-
-        /* =======================
-        Button
-        ======================= */
-
-        document.getElementById("markDone").onclick = async () => {
-            await setMarkAsDone(true);
-
-            // force commit time on mobile
-            setTimeout(() => {
-                alert("Marked as done. Now REFRESH.");
-            }, 200);
-        };
+        });
     </script>
+
 
 </body>
 
